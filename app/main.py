@@ -97,7 +97,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     # Allow requests from these origins (your React dev servers)
-    allow_origins=settings.cors_origins,  # FIXED: Use config instead of hardcoded
+    allow_origins=settings.allowed_origins.split(","),    
     # Allow cookies and authentication headers
     allow_credentials=True,
     # Allow all HTTP methods (GET, POST, PUT, DELETE, etc.)
