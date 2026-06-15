@@ -7,7 +7,7 @@ python-dotenv==1.0.0
 pydantic-settings==2.1.0
 
 # Database
-supabase==2.3.0
+supabase==2.10.0
 
 # File Upload Support
 python-multipart==0.0.6
