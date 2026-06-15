@@ -29,58 +29,87 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """
     Lifespan context manager for startup and shutdown events.
-    
-    This is the modern way to handle startup/shutdown in FastAPI (replaces deprecated @app.on_event).
     Code before 'yield' runs on startup, code after 'yield' runs on shutdown.
     """
-    # Startup: runs when the server starts
-    logger.info("🚀 AI Fitness Trainer API is starting up...")
-    logger.info(f"📁 Model directory: {settings.model_dir}")
-    logger.info(f"🌍 Environment: {settings.environment}")
+    logger.info("AI Fitness Trainer API is starting up...")
+    logger.info(f"Model directory: {settings.model_dir}")
+    logger.info(f"Environment: {settings.environment}")
     
-    # Load AI model if files exist
-    model_path = os.path.join(settings.model_dir, "best_model.keras")
-    labels_path = os.path.join(settings.model_dir, "label_encoder.npy")
+    model_dir = settings.model_dir
+    model_path = os.path.join(model_dir, "best_model.keras")
+    labels_path = os.path.join(model_dir, "label_encoder.npy")
+    alt_model_path = os.path.join(model_dir, "lstm_model.keras")
     
-    if os.path.exists(model_path) and os.path.exists(labels_path):
+    # Download model files from Supabase Storage if they are not found locally
+    if not os.path.exists(model_path) or not os.path.exists(labels_path):
+        logger.info("Model files not found locally. Downloading from Supabase Storage...")
+        
         try:
-            import tensorflow as tf
-            logger.info(f"Loading model from {model_path}...")
+            os.makedirs(model_dir, exist_ok=True)
             
-            # Try loading with compile=False to avoid optimizer issues
-            try:
-                app.state.model = tf.keras.models.load_model(model_path, compile=False)
-            except Exception as e1:
-                logger.warning(f"Failed to load best_model.keras: {e1}")
-                # Try alternative model file
-                alt_model_path = os.path.join(settings.model_dir, "lstm_model.keras")
-                if os.path.exists(alt_model_path):
-                    logger.info(f"Trying alternative model: {alt_model_path}")
-                    app.state.model = tf.keras.models.load_model(alt_model_path, compile=False)
-                else:
-                    raise e1
+            from supabase import create_client
             
-            app.state.labels = np.load(labels_path, allow_pickle=True)
-            app.state.labels = np.array([str(x) for x in app.state.labels])
-            app.state.model_loaded = True
+            storage_client = create_client(
+                settings.supabase_url,
+                settings.supabase_service_key
+            )
             
-            logger.info(f"✅ Model loaded successfully. Classes: {app.state.labels}")
+            files_to_download = [
+                ("best_model.keras", model_path),
+                ("label_encoder.npy", labels_path),
+                ("lstm_model.keras", alt_model_path),
+            ]
             
+            for storage_file_name, local_file_path in files_to_download:
+                if not os.path.exists(local_file_path):
+                    logger.info(f"Downloading {storage_file_name}...")
+                    file_bytes = storage_client.storage.from_("ai-models").download(storage_file_name)
+                    
+                    with open(local_file_path, "wb") as f:
+                        f.write(file_bytes)
+                    
+                    logger.info(f"{storage_file_name} downloaded successfully")
+        
         except Exception as e:
-            logger.error(f"❌ Failed to load model: {e}")
+            logger.error(f"Failed to download model files from Supabase Storage: {e}")
             app.state.model = None
             app.state.labels = None
             app.state.model_loaded = False
-    else:
-        logger.warning(f"⚠️  Model files not found at {settings.model_dir}. AI analysis will be unavailable.")
+            yield
+            return
+    
+    # Load the model
+    try:
+        import tensorflow as tf
+        
+        logger.info(f"Loading model from {model_path}...")
+        
+        try:
+            app.state.model = tf.keras.models.load_model(model_path, compile=False)
+        except Exception as e1:
+            logger.warning(f"Failed to load best_model.keras: {e1}")
+            
+            if os.path.exists(alt_model_path):
+                logger.info(f"Trying alternative model: {alt_model_path}")
+                app.state.model = tf.keras.models.load_model(alt_model_path, compile=False)
+            else:
+                raise e1
+        
+        app.state.labels = np.load(labels_path, allow_pickle=True)
+        app.state.labels = np.array([str(x) for x in app.state.labels])
+        app.state.model_loaded = True
+        
+        logger.info(f"Model loaded successfully. Classes: {app.state.labels}")
+    
+    except Exception as e:
+        logger.error(f"Failed to load model: {e}")
         app.state.model = None
         app.state.labels = None
         app.state.model_loaded = False
     
-    yield  # Server is now running and handling requests
+    yield
     
-    # Shutdown: runs when the server stops
-    logger.info("👋 AI Fitness Trainer API is shutting down...")
+    logger.info("AI Fitness Trainer API is shutting down...")
 
 
 # Create the FastAPI application instance
