@@ -46,6 +46,11 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:3000"
     frontend_url_alt: str = "http://localhost:5173"
     cors_origins: List[str] = ["http://localhost:3000", "http://localhost:5173"]
+
+    # Production CORS Configuration
+    # In Railway, set ALLOWED_ORIGINS like:
+    # https://your-frontend.vercel.app,http://localhost:5173
+    allowed_origins: str = "http://localhost:5173,http://localhost:3000"
     
     # File Upload Configuration (Feature 6)
     max_upload_size_mb: int = 500  # Maximum video upload size in MB
