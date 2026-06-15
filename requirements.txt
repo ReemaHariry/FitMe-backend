@@ -23,8 +23,7 @@ passlib[bcrypt]==1.7.4
 # AI Libraries (Feature 6)
 tensorflow==2.18.0
 mediapipe==0.10.14
-opencv-python==4.10.0.84
+opencv-python-headless==4.10.0.84
 scikit-learn==1.4.0
-
 
 email-validator==2.2.0
