@@ -12,37 +12,37 @@ from app.reports.mistake_classifier import MistakeClassifier
 class ReportGenerator:
     """
     Generates comprehensive session reports from tracked data.
-    
+
     This module takes SessionTracker data and produces a structured,
     user-friendly report suitable for frontend display or API response.
     """
-    
+
     # Thresholds for warnings
     HIGH_FREQUENCY_THRESHOLD = 5  # Mistakes repeated 5+ times trigger warning
     CRITICAL_FREQUENCY_THRESHOLD = 10  # Mistakes repeated 10+ times are critical
-    
+
     @staticmethod
     def format_timestamp(seconds: float) -> str:
         """Convert seconds to MM:SS format."""
         minutes = int(seconds // 60)
         secs = int(seconds % 60)
         return f"{minutes:02d}:{secs:02d}"
-    
+
     @staticmethod
     def generate_injury_warning(mistake_type: str, count: int) -> Dict[str, str]:
         """
         Generate a friendly injury risk warning for repeated mistakes.
-        
+
         Args:
             mistake_type: The type of mistake
             count: Number of times it occurred
-            
+
         Returns:
             Dictionary with warning level and message
         """
         injury_risk = MistakeClassifier.get_injury_risk(mistake_type)
         is_high_risk = MistakeClassifier.is_high_risk_mistake(mistake_type)
-        
+
         # Determine warning level
         if count >= ReportGenerator.CRITICAL_FREQUENCY_THRESHOLD:
             level = "critical"
@@ -53,7 +53,7 @@ class ReportGenerator:
         else:
             level = "info"
             frequency_text = "a few times"
-        
+
         # Craft friendly message
         if is_high_risk and count >= ReportGenerator.HIGH_FREQUENCY_THRESHOLD:
             message = (
@@ -72,51 +72,51 @@ class ReportGenerator:
                 f"This happened {frequency_text} during your session. "
                 f"Keep an eye on it to prevent {injury_risk}."
             )
-        
+
         return {
             "level": level,
             "message": message,
             "injury_risk": injury_risk
         }
-    
+
     @classmethod
     def generate_mistake_summary(cls, session_data: dict) -> List[Dict]:
         """
         Generate a summary of all mistakes with aggregation and warnings.
-        
+
         Args:
             session_data: Session summary from SessionTracker
-            
+
         Returns:
             List of mistake summaries with metadata
         """
         mistake_frequency = session_data.get("mistake_frequency", {})
         mistakes_by_type = defaultdict(list)
-        
+
         # Group mistakes by type
         for mistake in session_data.get("mistakes", []):
             mistakes_by_type[mistake["mistake_type"]].append(mistake)
-        
+
         summaries = []
-        
+
         for mistake_type, occurrences in mistakes_by_type.items():
             count = len(occurrences)
-            
+
             # Get first and last occurrence
             first_occurrence = occurrences[0]
             last_occurrence = occurrences[-1]
-            
+
             # Get all timestamps
             timestamps = [m["timestamp"] for m in occurrences]
-            
+
             # Get correction tip
             correction = MistakeClassifier.get_correction_tip(mistake_type)
-            
+
             # Generate warning if high frequency
             warning = None
             if count >= cls.HIGH_FREQUENCY_THRESHOLD:
                 warning = cls.generate_injury_warning(mistake_type, count)
-            
+
             summary = {
                 "mistake_type": mistake_type,
                 "mistake_message": first_occurrence["mistake_message"],
@@ -128,34 +128,34 @@ class ReportGenerator:
                 "correction_tip": correction,
                 "warning": warning
             }
-            
+
             summaries.append(summary)
-        
+
         # Sort by count (most frequent first)
         summaries.sort(key=lambda x: x["count"], reverse=True)
-        
+
         return summaries
-    
+
     @classmethod
     def generate_overall_summary(cls, session_data: dict, mistake_summaries: List[Dict]) -> Dict:
         """
         Generate overall session summary with key insights.
-        
+
         Args:
             session_data: Session summary from SessionTracker
             mistake_summaries: Processed mistake summaries
-            
+
         Returns:
             Dictionary with overall insights
         """
         total_mistakes = session_data.get("total_mistakes", 0)
         duration = session_data.get("duration_seconds", 0)
         exercise = session_data.get("exercise_detected", "Unknown")
-        
+
         # Calculate statistics
         unique_mistake_types = len(mistake_summaries)
         high_risk_count = sum(1 for m in mistake_summaries if m.get("warning"))
-        
+
         # Determine overall performance
         if total_mistakes == 0:
             performance = "excellent"
@@ -169,11 +169,11 @@ class ReportGenerator:
         else:
             performance = "needs_improvement"
             message = "We noticed several form issues during your workout. Don't worry - form takes practice! Focus on the key corrections below."
-        
+
         # Add injury risk note if applicable
         if high_risk_count > 0:
             message += f" Please pay special attention to the {high_risk_count} warning(s) below to prevent potential injury."
-        
+
         return {
             "performance_rating": performance,
             "message": message,
@@ -183,15 +183,15 @@ class ReportGenerator:
             "duration_formatted": cls.format_timestamp(duration),
             "exercise_type": exercise
         }
-    
+
     @classmethod
     def generate_report(cls, session_data: dict) -> Dict:
         """
         Generate complete session report.
-        
+
         Args:
             session_data: Session summary from SessionTracker.get_session_summary()
-            
+
         Returns:
             Complete structured report ready for JSON serialization
         """
@@ -205,10 +205,10 @@ class ReportGenerator:
         
         # Generate mistake summaries
         mistake_summaries = cls.generate_mistake_summary(session_data)
-        
+
         # Generate overall summary
         overall_summary = cls.generate_overall_summary(session_data, mistake_summaries)
-        
+
         # Build complete report
         report = {
             "session_info": {
@@ -232,9 +232,9 @@ class ReportGenerator:
             },
             "generated_at": datetime.now().isoformat()
         }
-        
+
         return report
-    
+
     @classmethod
     def generate_no_pose_report(cls, session_data: dict) -> Dict:
         """
@@ -288,17 +288,17 @@ class ReportGenerator:
     def generate_quick_summary(cls, session_data: dict) -> str:
         """
         Generate a quick text summary for display.
-        
+
         Args:
             session_data: Session summary from SessionTracker
-            
+
         Returns:
             Human-readable summary string
         """
         total_mistakes = session_data.get("total_mistakes", 0)
         exercise = session_data.get("exercise_detected", "workout")
         duration = cls.format_timestamp(session_data.get("duration_seconds", 0))
-        
+
         if total_mistakes == 0:
             return f"Perfect {exercise} session! Duration: {duration}. No form issues detected. Excellent work!"
         else:

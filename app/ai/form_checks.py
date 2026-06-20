@@ -157,6 +157,7 @@ def check_situp_form(results, w, h):
     Simple sit-up starter rules (you can refine later):
     - torso angle proxy (shoulder-hip-knee)
     - neck-forward proxy (nose x far from shoulder x)
+    - leg straightness (hip-knee-ankle) - legs should stay bent
     """
     L = mp_pose.PoseLandmark
     lms = results.pose_landmarks.landmark
@@ -164,17 +165,21 @@ def check_situp_form(results, w, h):
     sh = _xy(lms, L.LEFT_SHOULDER.value, w, h)
     hip = _xy(lms, L.LEFT_HIP.value, w, h)
     knee = _xy(lms, L.LEFT_KNEE.value, w, h)
+    ankle = _xy(lms, L.LEFT_ANKLE.value, w, h)
     nose = _xy(lms, L.NOSE.value, w, h)
 
     torso_angle = calculate_angle(sh, hip, knee)
     neck_forward = abs(nose[0] - sh[0]) > 80  # tune based on camera distance
+    knee_angle = calculate_angle(hip, knee, ankle)
 
     issues = []
     if torso_angle > 165:
         issues.append("Curl up more (not enough range)")
     if neck_forward:
         issues.append("Don't pull your neck forward")
+    if knee_angle > 160:
+        issues.append("Bend your knees")
 
     feedback = "Good Form" if not issues else "Bad Form: " + " | ".join(issues)
-    metrics = {"torso_angle": torso_angle, "neck_forward": neck_forward}
+    metrics = {"torso_angle": torso_angle, "neck_forward": neck_forward, "knee_angle": knee_angle}
     return feedback, metrics

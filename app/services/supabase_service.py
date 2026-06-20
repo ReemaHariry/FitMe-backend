@@ -101,6 +101,7 @@ def save_profile(user_id: str, profile_data: Dict[str, Any]) -> Dict[str, Any]:
         "training_days_per_week": profile_data.get("training_days_per_week"),
         "preferred_workout_duration": profile_data.get("preferred_workout_duration"),
         "onboarding_complete": profile_data.get("onboarding_complete", True),
+        "updated_at": datetime.now().isoformat(),  # ADDED: Track update time
     }
     
     # Upsert: insert or update if exists
@@ -114,6 +115,40 @@ def save_profile(user_id: str, profile_data: Dict[str, Any]) -> Dict[str, Any]:
         return result.data[0]
     else:
         raise Exception("Failed to save profile")
+
+
+# ADDED: New function for partial profile updates
+def update_profile(user_id: str, update_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Update specific fields in user profile (PATCH semantics).
+    
+    Only updates the fields provided in update_data.
+    Always sets updated_at timestamp.
+    
+    Args:
+        user_id: UUID of the user
+        update_data: Dictionary with fields to update
+        
+    Returns:
+        Dict containing the updated profile data
+        
+    Raises:
+        Exception: If update fails
+    """
+    supabase = get_supabase_client()
+    
+    # Add updated_at timestamp
+    update_data["updated_at"] = datetime.now().isoformat()
+    
+    # Update only provided fields
+    result = supabase.table("profiles").update(
+        update_data
+    ).eq("user_id", user_id).execute()
+    
+    if result.data and len(result.data) > 0:
+        return result.data[0]
+    else:
+        raise Exception("Failed to update profile")
 
 
 def get_profile(user_id: str) -> Optional[Dict[str, Any]]:
@@ -188,6 +223,7 @@ def verify_token(token: str) -> Optional[Dict[str, Any]]:
             return {
                 "id": response.user.id,
                 "email": response.user.email,
+                "created_at": response.user.created_at.isoformat() if response.user.created_at else None,  # ADDED
                 "user_metadata": response.user.user_metadata or {}
             }
         return None
@@ -744,24 +780,30 @@ async def get_session_status(session_id: str, user_id: str) -> Optional[dict]:
 
 def get_progress_photos(user_id: str) -> list:
     """
-    Get all progress photos for a user.
+    Get all progress photos for a user with FRESH signed URLs.
     
-    Returns photos ordered by created_at DESC (newest first).
-    For each photo_type, the frontend will show only the most recent one.
+    FIXED: Regenerates signed URLs on every fetch to ensure they're valid.
+    Returns photos ordered by taken_at DESC (newest first).
     
     Args:
         user_id: UUID of the user
         
     Returns:
-        List of progress photo dicts
+        List of progress photo dicts with fresh signed URLs
     """
     supabase = get_supabase_client()
     
+    # Fetch photos ordered by taken_at DESC, then created_at DESC
     result = supabase.table("progress_photos").select(
         "id, user_id, photo_url, storage_path, photo_type, taken_at, created_at"
-    ).eq("user_id", user_id).order("created_at", desc=True).execute()
+    ).eq("user_id", user_id).order("taken_at", desc=True).order("created_at", desc=True).execute()
     
-    return result.data or []
+    photos = result.data or []
+    
+    # FIXED: Regenerate fresh signed URLs
+    photos = regenerate_photo_signed_urls(photos)
+    
+    return photos
 
 
 def save_progress_photo(
@@ -850,6 +892,7 @@ def upload_progress_photo_to_storage(
     Upload a progress photo to Supabase Storage (PRIVATE bucket).
     
     Files are organized by user_id and photo_type for easy management.
+    FIXED: Generate fresh signed URL with 1 year expiration.
     
     Args:
         file_bytes: Raw bytes of the image file
@@ -885,7 +928,7 @@ def upload_progress_photo_to_storage(
         
         logger.info(f"Progress photo uploaded to storage: {storage_path}")
         
-        # Generate signed URL (expires in 1 year)
+        # FIXED: Generate signed URL (expires in 1 year = 365 days)
         signed_url_response = supabase.storage.from_("progress-photos").create_signed_url(
             storage_path,
             3600 * 24 * 365  # 1 year in seconds
@@ -901,6 +944,43 @@ def upload_progress_photo_to_storage(
     except Exception as e:
         logger.error(f"Failed to upload progress photo: {str(e)}")
         raise Exception(f"Failed to upload progress photo: {str(e)}")
+
+
+# ADDED: Function to regenerate signed URLs for existing photos
+def regenerate_photo_signed_urls(photos: list) -> list:
+    """
+    Regenerate signed URLs for a list of photos.
+    
+    This should be called when fetching progress photos to ensure
+    URLs are fresh and valid.
+    
+    Args:
+        photos: List of photo dicts with storage_path field
+        
+    Returns:
+        List of photo dicts with updated photo_url (signed URL)
+    """
+    supabase = get_supabase_client()
+    
+    for photo in photos:
+        try:
+            storage_path = photo.get("storage_path")
+            if storage_path:
+                # Generate fresh signed URL
+                signed_url_response = supabase.storage.from_("progress-photos").create_signed_url(
+                    storage_path,
+                    3600 * 24 * 365  # 1 year expiration
+                )
+                
+                if signed_url_response and "signedURL" in signed_url_response:
+                    photo["photo_url"] = signed_url_response["signedURL"]
+                else:
+                    logger.warning(f"Failed to generate signed URL for {storage_path}")
+        except Exception as e:
+            logger.error(f"Error regenerating signed URL: {str(e)}")
+            # Keep old URL if regeneration fails
+            
+    return photos
 
 
 # ============================================================================

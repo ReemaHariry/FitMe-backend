@@ -34,6 +34,7 @@ class UserResponse(BaseModel):
     name: str
     email: str
     onboarding_complete: bool
+    created_at: Optional[str] = None  # ADDED: For "Member Since" display
 
 
 class AuthResponse(BaseModel):
@@ -157,6 +158,7 @@ async def register(data: RegisterRequest):
                 id=response.user.id,
                 name=data.name,
                 email=response.user.email,
+                created_at=response.user.created_at.isoformat() if response.user.created_at else None,  # FIXED: Convert datetime to string
                 onboarding_complete=profile.get("onboarding_complete", False) if profile else False
             )
         )
@@ -240,6 +242,7 @@ async def login(data: LoginRequest):
                 id=response.user.id,
                 name=user_name,
                 email=response.user.email,
+                created_at=response.user.created_at.isoformat() if response.user.created_at else None,  # FIXED: Convert datetime to string
                 onboarding_complete=profile.get("onboarding_complete", False) if profile else False
             )
         )
@@ -312,6 +315,7 @@ async def get_current_user(authorization: Optional[str] = Header(None)):
         id=user_data["id"],
         name=user_name,
         email=user_data["email"],
+        created_at=user_data.get("created_at"),  # ADDED
         onboarding_complete=profile.get("onboarding_complete", False) if profile else False
     )
 

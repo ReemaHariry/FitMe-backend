@@ -81,36 +81,53 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
                 exercise_counts[s["exercise_type"]] += 1
         most_practiced = max(exercise_counts, key=exercise_counts.get) if exercise_counts else "none"
         
-        # Sessions this week (Monday to today)
+        # Sessions this week (Monday to today) - use proper date comparison
         today = date.today()
         monday = today - timedelta(days=today.weekday())
-        monday_str = monday.isoformat()
-        sessions_this_week = sum(1 for s in sessions if s.get("created_at", "") >= monday_str)
+        sessions_this_week = 0
+        for s in sessions:
+            raw = s.get("created_at") or ""
+            try:
+                s_date = date.fromisoformat(raw[:10])
+                if s_date >= monday:
+                    sessions_this_week += 1
+            except Exception:
+                pass
         
-        # Current streak (consecutive days with sessions ending today)
+        # Build set of dates that had sessions
         session_dates = set()
         for s in sessions:
-            if s.get("created_at"):
+            raw = s.get("created_at") or s.get("started_at")
+            if raw:
                 try:
-                    d = s["created_at"][:10]  # get YYYY-MM-DD
-                    session_dates.add(d)
+                    session_dates.add(raw[:10])  # YYYY-MM-DD
                 except Exception:
                     pass
         
+        # Current streak: consecutive days ending today or yesterday
         current_streak = 0
         check_date = today
+        # If no session today, start check from yesterday
+        if today.isoformat() not in session_dates:
+            check_date = today - timedelta(days=1)
         while check_date.isoformat() in session_dates:
             current_streak += 1
             check_date -= timedelta(days=1)
         
-        # If no session today, check if streak continues from yesterday
-        if current_streak == 0:
-            check_date = today - timedelta(days=1)
-            while check_date.isoformat() in session_dates:
-                current_streak += 1
-                check_date -= timedelta(days=1)
-        
-        best_streak = max(current_streak, 1) if sessions else 0
+        # Best streak: find the longest consecutive run in history
+        best_streak = 0
+        if session_dates:
+            sorted_dates = sorted(session_dates)
+            run = 1
+            for i in range(1, len(sorted_dates)):
+                prev = date.fromisoformat(sorted_dates[i - 1])
+                curr = date.fromisoformat(sorted_dates[i])
+                if (curr - prev).days == 1:
+                    run += 1
+                    best_streak = max(best_streak, run)
+                else:
+                    run = 1
+            best_streak = max(best_streak, run, current_streak)
         
         # Improvement this month vs last month
         current_month = today.strftime("%Y-%m")

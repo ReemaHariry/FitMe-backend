@@ -11,6 +11,7 @@ from datetime import date
 from app.services.supabase_service import (
     get_supabase_client,
     save_profile,
+    update_profile,  # ADDED: For PATCH updates
     get_profile,
     verify_token,
     get_progress_photos,
@@ -33,6 +34,19 @@ class ProfileUpdateRequest(BaseModel):
     fitness_goal: str = Field(..., pattern="^(lose_weight|build_muscle|maintain)$")
     training_days_per_week: int = Field(..., ge=1, le=7)
     preferred_workout_duration: int = Field(..., ge=15, le=180, description="Duration in minutes")
+
+
+# ADDED: Model for partial profile updates (PUT endpoint)
+class ProfilePatchRequest(BaseModel):
+    """Request body for PATCH updates to profile (all fields optional)"""
+    full_name: Optional[str] = None
+    gender: Optional[str] = Field(None, pattern="^(male|female)$")
+    age: Optional[int] = Field(None, ge=13, le=100)
+    height: Optional[float] = Field(None, ge=100, le=250)
+    weight: Optional[float] = Field(None, ge=30, le=300)
+    fitness_goal: Optional[str] = Field(None, pattern="^(lose_weight|build_muscle|maintain)$")
+    training_days_per_week: Optional[int] = Field(None, ge=1, le=7)
+    preferred_workout_duration: Optional[int] = Field(None, ge=15, le=180)
 
 
 class ProfileResponse(BaseModel):
@@ -132,7 +146,7 @@ router = APIRouter(
 # ============================================================================
 
 @router.post("/profile", response_model=ProfileResponse)
-async def update_profile(
+async def save_user_profile(
     data: ProfileUpdateRequest,
     current_user: dict = Depends(get_current_user)
 ):
@@ -219,22 +233,88 @@ async def get_user_profile(current_user: dict = Depends(get_current_user)):
 
 
 # ============================================================================
-# ENDPOINT: GET /users/progress-photos
+# ENDPOINT: PUT /users/profile (ADDED - Fix for Problem 1)
 # ============================================================================
 
-@router.get("/progress-photos", response_model=List[ProgressPhotoResponse])
-async def get_user_progress_photos(current_user: dict = Depends(get_current_user)):
+@router.put("/profile", response_model=ProfileDataResponse)
+async def update_user_profile(
+    data: ProfilePatchRequest,
+    current_user: dict = Depends(get_current_user)
+):
     """
-    Get all progress photos for the current user.
+    Update user profile with partial data (PATCH semantics).
     
-    Returns photos ordered by created_at DESC (newest first).
-    The frontend will show only the most recent photo for each type.
+    FIXED: This endpoint allows updating specific profile fields without
+    sending all fields. Only fields provided in the request will be updated.
+    
+    All fields are optional - send only what you want to update.
+    The updated profile is returned.
     
     Requires: Authorization header with valid Bearer token
     """
     try:
         user_id = current_user["id"]
-        photos = get_progress_photos(user_id)
+        
+        # Build update dict with only provided fields
+        update_data = {}
+        if data.full_name is not None:
+            update_data["full_name"] = data.full_name
+        if data.gender is not None:
+            update_data["gender"] = data.gender
+        if data.age is not None:
+            update_data["age"] = data.age
+        if data.height is not None:
+            update_data["height"] = data.height
+        if data.weight is not None:
+            update_data["weight"] = data.weight
+        if data.fitness_goal is not None:
+            update_data["fitness_goal"] = data.fitness_goal
+        if data.training_days_per_week is not None:
+            update_data["training_days_per_week"] = data.training_days_per_week
+        if data.preferred_workout_duration is not None:
+            update_data["preferred_workout_duration"] = data.preferred_workout_duration
+        
+        # Nothing to update
+        if not update_data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No fields provided to update"
+            )
+        
+        # Update profile
+        updated_profile = update_profile(user_id, update_data)
+        
+        return ProfileDataResponse(**updated_profile)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Profile update error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update profile. Please try again."
+        )
+
+
+# ============================================================================
+# ENDPOINT: GET /users/progress-photos (FIXED - Returns ALL photos)
+# ============================================================================
+
+@router.get("/progress-photos", response_model=List[ProgressPhotoResponse])
+async def get_user_progress_photos(current_user: dict = Depends(get_current_user)):
+    """
+    Get ALL progress photos for the current user.
+    
+    FIXED: Returns ALL photos (not just latest per type) with FRESH signed URLs.
+    Photos are ordered by taken_at DESC, then created_at DESC.
+    
+    The frontend will group by photo_type and implement navigation to show history.
+    
+    Requires: Authorization header with valid Bearer token
+    """
+    try:
+        user_id = current_user["id"]
+        photos = get_progress_photos(user_id)  # This now regenerates signed URLs
         return [ProgressPhotoResponse(**photo) for photo in photos]
     except Exception as e:
         print(f"Failed to fetch progress photos: {str(e)}")

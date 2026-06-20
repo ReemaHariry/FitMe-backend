@@ -1,5 +1,5 @@
 """
-AI Fitness Trainer API - Main Application Entry Point
+FitMe API - Main Application Entry Point
 
 This is the core FastAPI application that handles all HTTP requests.
 """
@@ -17,7 +17,7 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"  # Suppress TensorFlow warnings
 os.environ["MEDIAPIPE_DISABLE_GPU"] = "1"  # Use CPU only
 
 # Import routers
-from app.routes import auth, users, reports, videos, sessions, dashboard, weight  # NEW: Added weight
+from app.routes import auth, users, reports, videos, sessions, dashboard, weight, workout_plan, nutrition
 from app.websockets.live_handler import handle_live_session
 
 # Configure logging
@@ -31,7 +31,7 @@ async def lifespan(app: FastAPI):
     Lifespan context manager for startup and shutdown events.
     Code before 'yield' runs on startup, code after 'yield' runs on shutdown.
     """
-    logger.info("AI Fitness Trainer API is starting up...")
+    logger.info("FitMe API is starting up...")
     logger.info(f"Model directory: {settings.model_dir}")
     logger.info(f"Environment: {settings.environment}")
     
@@ -109,12 +109,12 @@ async def lifespan(app: FastAPI):
     
     yield
     
-    logger.info("AI Fitness Trainer API is shutting down...")
+    logger.info("FitMe API is shutting down...")
 
 
 # Create the FastAPI application instance
 app = FastAPI(
-    title="AI Fitness Trainer API",
+    title="FitMe API",
     version="1.0.0",
     description="Backend API for AI-powered fitness training and form correction",
     lifespan=lifespan  # Attach the lifespan context manager
@@ -161,6 +161,12 @@ app.include_router(dashboard.router, prefix="/dashboard", tags=["dashboard"])
 # NEW: Include weight tracking routes
 app.include_router(weight.router, prefix="/weight", tags=["weight"])
 
+# Include workout plan routes
+app.include_router(workout_plan.router, tags=["workout-plan"])
+
+# Include nutrition planner routes
+app.include_router(nutrition.router, tags=["nutrition"])
+
 
 # ============================================================================
 # HEALTH CHECK ENDPOINT
@@ -181,7 +187,7 @@ async def health_check():
     
     return {
         "status": "ok",
-        "message": "AI Fitness Trainer API is running",
+        "message": "FitMe API is running",
         "version": "1.0.0",
         "environment": settings.environment,
         "model_loaded": app.state.model_loaded if hasattr(app.state, 'model_loaded') else False,
@@ -202,7 +208,7 @@ async def root():
         dict: Welcome message with links to documentation
     """
     return {
-        "message": "Welcome to AI Fitness Trainer API",
+        "message": "Welcome to FitMe API",
         "version": "1.0.0",
         "docs": "/docs",
         "health": "/health"

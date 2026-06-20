@@ -74,7 +74,7 @@ def analyze_video(
     
     # Track all predictions to determine dominant exercise type
     all_predictions = []
-    
+
     # Open video
     cap = cv2.VideoCapture(file_path)
     if not cap.isOpened():
@@ -108,7 +108,13 @@ def analyze_video(
                     break
                 
                 frame_number += 1
-                timestamp = (datetime.now() - start_time).total_seconds()
+                # Use the video's own playback time (frame / fps), not wall-clock
+                # processing time. Processing a frame (MediaPipe + LSTM inference)
+                # takes real time on CPU, so for a short video the wall-clock
+                # elapsed time can end up far longer than the video itself,
+                # making recorded mistake timestamps (e.g. 00:43) exceed the
+                # actual video duration (e.g. 8 seconds).
+                timestamp = frame_number / video_fps
                 
                 # Resize for speed
                 frame_small = cv2.resize(frame, (520, 300))
@@ -163,13 +169,13 @@ def analyze_video(
                 
                 # Store prediction for exercise type detection
                 all_predictions.append(predicted_class)
-                
+
                 # Get frame dimensions for form checks
                 h, w = frame_small.shape[:2]
-                
+
                 # Normalize class name
                 cls_normalized = predicted_class.lower().replace(" ", "").replace("-", "_")
-                
+
                 # Run form check based on detected exercise type
                 feedback = None
                 if "push" in cls_normalized:
@@ -178,12 +184,12 @@ def analyze_video(
                     feedback, _ = check_squat_form(results, w, h)
                 elif "sit" in cls_normalized:
                     feedback, _ = check_situp_form(results, w, h)
-                
+
                 # Record mistake if bad form detected
                 if feedback and "Bad Form" in feedback:
                     mistake_type, mistake_message, severity = \
                         MistakeClassifier.classify_feedback(feedback, predicted_class)
-                    
+
                     if mistake_type:
                         tracker.record_mistake(
                             timestamp=timestamp,
@@ -193,16 +199,16 @@ def analyze_video(
                             mistake_message=mistake_message,
                             severity=severity
                         )
-                
+
                 # Log progress every 100 frames
                 if frame_number % 100 == 0:
                     logger.info(f"Processed {frame_number}/{total_video_frames} frames")
-        
+
     finally:
         # Always release the video capture
         cap.release()
         logger.info(f"Video capture released. Processed {frame_number} frames")
-    
+
     # Determine the dominant exercise type from all predictions
     if all_predictions:
         # Count occurrences of each exercise type
