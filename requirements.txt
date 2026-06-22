@@ -27,3 +27,7 @@ opencv-python-headless==4.10.0.84
 scikit-learn==1.4.0
 
 email-validator==2.2.0
+
+# AI Coach Chatbot (LangChain + Groq)
+langchain==0.3.7
+langchain-groq==0.2.1

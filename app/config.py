@@ -56,6 +56,11 @@ class Settings(BaseSettings):
     max_upload_size_mb: int = 500  # Maximum video upload size in MB
     temp_video_dir: str = "/tmp/fitpose_videos"  # Temporary directory for video processing
 
+    # AI Coach Chatbot Configuration (Groq via LangChain)
+    # Get a free API key from https://console.groq.com/keys
+    groq_api_key: str = ""
+    coach_model: str = "llama-3.3-70b-versatile"  # Fast, free Groq-hosted model
+
 
 # Create a single instance of settings that will be imported throughout the app
 # This ensures all modules use the same configuration
