@@ -17,7 +17,8 @@ from app.services.supabase_service import (
     get_progress_photos,
     save_progress_photo,
     delete_progress_photo,
-    upload_progress_photo_to_storage
+    upload_progress_photo_to_storage,
+    delete_user_account
 )
 
 
@@ -30,7 +31,7 @@ class ProfileUpdateRequest(BaseModel):
     gender: str = Field(..., pattern="^(male|female)$", description="User's gender")
     age: int = Field(..., ge=13, le=100, description="User's age")
     height: float = Field(..., ge=100, le=250, description="Height in cm")
-    weight: float = Field(..., ge=30, le=300, description="Weight in kg")
+    weight: float = Field(..., ge=10, le=300, description="Weight in kg")
     fitness_goal: str = Field(..., pattern="^(lose_weight|build_muscle|maintain)$")
     training_days_per_week: int = Field(..., ge=1, le=7)
     preferred_workout_duration: int = Field(..., ge=15, le=180, description="Duration in minutes")
@@ -43,7 +44,7 @@ class ProfilePatchRequest(BaseModel):
     gender: Optional[str] = Field(None, pattern="^(male|female)$")
     age: Optional[int] = Field(None, ge=13, le=100)
     height: Optional[float] = Field(None, ge=100, le=250)
-    weight: Optional[float] = Field(None, ge=30, le=300)
+    weight: Optional[float] = Field(None, ge=10, le=300)
     fitness_goal: Optional[str] = Field(None, pattern="^(lose_weight|build_muscle|maintain)$")
     training_days_per_week: Optional[int] = Field(None, ge=1, le=7)
     preferred_workout_duration: Optional[int] = Field(None, ge=15, le=180)
@@ -457,4 +458,34 @@ async def delete_user_progress_photo(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to delete progress photo"
+        )
+
+
+# ============================================================================
+# ENDPOINT: DELETE /users/account
+# ============================================================================
+
+@router.delete("/account")
+async def delete_account(current_user: dict = Depends(get_current_user)):
+    """
+    Permanently delete the user's account and all associated data.
+    
+    This calls Supabase Admin API to delete the Auth User.
+    Supabase's ON DELETE CASCADE rules will automatically delete their:
+    - Profile
+    - Weight Logs
+    - Exercise Sessions / Reports
+    - Progress Photos
+    
+    Requires: Authorization header with valid Bearer token
+    """
+    try:
+        user_id = current_user["id"]
+        delete_user_account(user_id)
+        return {"message": "Account successfully deleted"}
+    except Exception as e:
+        print(f"Failed to delete user account: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete account. Please try again later."
         )

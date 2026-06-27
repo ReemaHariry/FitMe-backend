@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 class LogWeightRequest(BaseModel):
     """Request body for logging weight"""
-    weight_kg: float = Field(..., ge=20, le=500, description="Weight in kilograms")
+    weight_kg: float = Field(..., ge=10, le=300, description="Weight in kilograms")
     note: Optional[str] = Field(None, max_length=500, description="Optional note")
 
 

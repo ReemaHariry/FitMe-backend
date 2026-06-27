@@ -179,21 +179,47 @@ def update_onboarding_status(user_id: str, complete: bool) -> Dict[str, Any]:
         complete: True if onboarding is complete, False otherwise
         
     Returns:
-        Dict containing updated profile data
-        
-    Raises:
-        Exception: If update fails
+        Dict containing updated data
     """
     supabase = get_supabase_client()
     
-    result = supabase.table("profiles").update({
-        "onboarding_complete": complete
-    }).eq("user_id", user_id).execute()
+    result = supabase.table("profiles").update(
+        {"onboarding_complete": complete, "updated_at": datetime.now().isoformat()}
+    ).eq("user_id", user_id).execute()
     
-    if result.data:
+    if result.data and len(result.data) > 0:
         return result.data[0]
     else:
         raise Exception("Failed to update onboarding status")
+
+
+# ============================================================================
+# ACCOUNT MANAGEMENT FUNCTIONS
+# ============================================================================
+
+def delete_user_account(user_id: str) -> bool:
+    """
+    Permanently delete a user account from Supabase Auth.
+    Because of Supabase's cascade delete rules, this will automatically
+    delete their profile, sessions, weight logs, and progress photos.
+    
+    Args:
+        user_id: UUID of the user
+        
+    Returns:
+        True if successful
+        
+    Raises:
+        Exception: If deletion fails
+    """
+    try:
+        supabase = get_supabase_client()
+        # Requires the service_role key to be used (which we initialize in get_supabase_client)
+        response = supabase.auth.admin.delete_user(user_id)
+        return True
+    except Exception as e:
+        logger.error(f"Failed to delete user account {user_id}: {e}")
+        raise Exception(f"Failed to delete account: {str(e)}")
 
 
 # ============================================================================
@@ -1018,7 +1044,7 @@ def log_weight(user_id: str, weight_kg: float, note: str = None) -> dict:
     
     Args:
         user_id: UUID of the user
-        weight_kg: Weight in kilograms (must be between 20 and 500)
+        weight_kg: Weight in kilograms (must be between 10 and 500)
         note: Optional note about the weigh-in
         
     Returns:
@@ -1027,8 +1053,8 @@ def log_weight(user_id: str, weight_kg: float, note: str = None) -> dict:
     Raises:
         ValueError: If weight_kg is out of valid range
     """
-    if weight_kg < 20 or weight_kg > 500:
-        raise ValueError("Weight must be between 20 and 500 kg")
+    if weight_kg < 10 or weight_kg > 500:
+        raise ValueError("Weight must be between 10 and 500 kg")
     
     supabase = get_supabase_client()
     from datetime import date
